@@ -9,12 +9,47 @@ SERVER = None
 BUFFER_SIZE = 4096
 
 name = None
+sending_file = None
 listbox = None
 textarea = None
 labelchat = None
 text_message = None
 
+# Boilerplate Code
+def receiveMessage():
+  global SERVER
+  global BUFFER_SIZE
+  
+  while True:
+    chunk = SERVER.recv(BUFFER_SIZE)
+    try:
+      #print(f"Receiving message at client end: {chunk.decode()}")
+      if("~tiul" in chunk.decode()):
+        letter_list = chunk.decode().split(",")
+        listbox.insert(letter_list[0], letter_list[0]+":"+letter_list[1]+": "+letter_list[3])
+        print(letter_list[0],letter_list[0]+":"+letter_list[1]+": "+letter_list[3])
+      else:
+        textarea.insert(END,"\n"+chunk.decode('ascii'))
+        textarea.see("end")
+        print(chunk.decode('ascii'))
+    except:
+      pass
+
+def connectToServer():
+  global SERVER, name
+  global sending_file
+
+  cname = name.get()
+  SERVER.send(cname.encode())
+
+def showClientList():
+  print(f"Calling client list function")
+  global listbox, SERVER
+  listbox.delete(0, "end")
+  SERVER.send("show list".encode("ascii"))
+
 def openChatWindow():
+  global name, listbox
   window = Tk()
   window.title("Messenger")
   window.geometry("500x350")
@@ -22,11 +57,11 @@ def openChatWindow():
   nameLabel = Label(window, text="Enter your Name", font=("Calibri", 10))
   nameLabel.place(x=10, y=10)
 
-  name = Entry(window, width=30, font=("Calibri", 10) )
+  name = Entry(window, width=30, font=("Calibri", 10))
   name.place(x = 120, y = 10)
   name.focus()
 
-  connectServer = Button(window, text="Connect to Chat Server", font=("Calibri", 10))
+  connectServer = Button(window, text="Connect to Chat Server", font=("Calibri", 10), command=connectToServer)
   connectServer.place(x = 350, y = 6)
 
   seperator = ttk.Separator(window, orient="horizontal")
@@ -47,7 +82,7 @@ def openChatWindow():
   disconnectBtn = Button(window, text="Disconnect", bd=1, font=("Calibri", 10))
   disconnectBtn.place(x=355, y=160)
 
-  refreshBtn = Button(window, text="Refresh", bd=1, font=("Calibri", 10))
+  refreshBtn = Button(window, text="Refresh", bd=1, font=("Calibri", 10), command=showClientList)
   refreshBtn.place(x=430, y=160)
 
   labelchat = Label(window, text="Chat Window", font=("Calibri", 10))
@@ -73,6 +108,10 @@ def setup():
   SERVER = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   SERVER.connect((IP_ADDRESS, PORT))
 
+  recieve_thread = Thread(target = receiveMessage)
+  recieve_thread.start()
+
+  
   openChatWindow()
 
 setup()
