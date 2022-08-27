@@ -11,29 +11,39 @@ BUFFER_SIZE = 4096
 name = None
 sending_file = None
 listbox = None
-textarea = None
+chatbox = None
 labelchat = None
 text_message = None
 
-# Boilerplate Code
 def receiveMessage():
   global SERVER
   global BUFFER_SIZE
   
   while True:
-    chunk = SERVER.recv(BUFFER_SIZE)
+    chunk = SERVER.recv(BUFFER_SIZE).decode()
     try:
-      #print(f"Receiving message at client end: {chunk.decode()}")
-      if("~tiul" in chunk.decode()):
-        letter_list = chunk.decode().split(",")
+      if("~tiul" in chunk):
+        letter_list = chunk.split(",")
         listbox.insert(letter_list[0], letter_list[0]+":"+letter_list[1]+": "+letter_list[3])
-        print(letter_list[0],letter_list[0]+":"+letter_list[1]+": "+letter_list[3])
       else:
-        textarea.insert(END,"\n"+chunk.decode('ascii'))
-        textarea.see("end")
-        print(chunk.decode('ascii'))
+        chatbox.insert(END,"\n"+chunk)
+        chatbox.see("end")
     except:
       pass
+
+def connectWithClient():
+  global SERVER, listbox
+  text = listbox.get(ANCHOR)
+  list_items = text.split(":")
+  msg = "connect "+ list_items[1]
+  SERVER.send(msg.encode('ascii'))
+
+def disconnectWithClient():
+  text = listbox.get(ANCHOR)
+  list_items = text.split(":")
+  msg = "disconnect "+ list_items[1]
+  print(msg)
+  SERVER.send(msg.encode('ascii'))
 
 def connectToServer():
   global SERVER, name
@@ -49,7 +59,7 @@ def showClientList():
   SERVER.send("show list".encode("ascii"))
 
 def openChatWindow():
-  global name, listbox
+  global name, listbox, chatbox
   window = Tk()
   window.title("Messenger")
   window.geometry("500x350")
@@ -76,10 +86,10 @@ def openChatWindow():
   scrollbar1 = Scrollbar(listbox, command=listbox.yview)
   scrollbar1.place(relx=1, relheight=1)
 
-  connectBtn = Button(window, text="Connect", bd=1, font=("Calibri", 10))
+  connectBtn = Button(window, text="Connect", bd=1, font=("Calibri", 10), command=connectWithClient)
   connectBtn.place(x=290, y=160)
 
-  disconnectBtn = Button(window, text="Disconnect", bd=1, font=("Calibri", 10))
+  disconnectBtn = Button(window, text="Disconnect", bd=1, font=("Calibri", 10), command=disconnectWithClient)
   disconnectBtn.place(x=355, y=160)
 
   refreshBtn = Button(window, text="Refresh", bd=1, font=("Calibri", 10), command=showClientList)
@@ -108,10 +118,9 @@ def setup():
   SERVER = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   SERVER.connect((IP_ADDRESS, PORT))
 
-  recieve_thread = Thread(target = receiveMessage)
+  recieve_thread = Thread(target=receiveMessage)
   recieve_thread.start()
 
-  
   openChatWindow()
 
 setup()
