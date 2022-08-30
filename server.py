@@ -1,6 +1,11 @@
 import socket
 from threading import Thread
-import time
+import time, os
+
+from pyftpdlib.authorizers import DummyAuthorizer
+from pyftpdlib.handlers import FTPHandler
+from pyftpdlib.servers import FTPServer
+
 
 IP_ADDRESS = '127.0.0.1'
 PORT = 8080
@@ -23,8 +28,7 @@ def acceptConnections():
       "file_size": 4096
     }
 
-    print(f"Connection established with {client_name}: {addr}")
-
+    print(f"  Connection established with {client_name}: {addr}")
     thread = Thread(target = handleClient, args=(client, client_name))
     thread.start()
 
@@ -48,7 +52,14 @@ def handleClient(client, name):
     
     except: 
       pass
-    
+
+def handleErrorMessage(client):
+  message = '''
+  You need to connect with one of the clients first before sending any files. 
+  Click on the Refresh button to see all the available clients.
+  '''
+  client.send(message.encode())
+
 def handleMessage(client, msg, name):
   if msg == "show list":
     handleShowList(client)
@@ -56,6 +67,19 @@ def handleMessage(client, msg, name):
     connectClient(msg, client, name)
   elif msg[:10] == 'disconnect':
     disconnectClient(msg, client, name)
+  else: 
+    connected = clients[name]["connected_with"]
+    if(connected):
+      sendTextMessage(name, msg)
+    else: 
+      handleErrorMessage(client)
+
+def sendTextMessage(name, msg):
+  global clients 
+  other_client_name = clients[name]["connected_with"]
+  other_client_socket = clients[other_client_name]["client"]
+  final_msg = f"{name}: {msg}" 
+  other_client_socket.send(final_msg.encode())
 
 def handleShowList(client):
   global clients
@@ -117,7 +141,7 @@ def disconnectClient(msg, client, name):
 def setup():
   global SERVER
 
-  SERVER  = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  SERVER = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   SERVER.bind((IP_ADDRESS, PORT))
   SERVER.listen(100)
 
@@ -125,6 +149,19 @@ def setup():
 
   acceptConnections()
 
-print("\n\t\t\t~~*** FILE SHARING ***~~\n")
-setup_thread=Thread(target=setup)
+def ftp():
+  authorizer = DummyAuthorizer()
+  authorizer.add_user("lftpd", "lftpd", ".", perm= "elradfmw")
+  handler = FTPHandler
+  handler.authorizer = authorizer
+
+  ftp_server = FTPServer((IP_ADDRESS, 21), handler)
+  ftp_server.serve_forever()
+
+print("\n\t\t\t~~*** File Sharing ***~~\n")
+
+setup_thread = Thread(target=setup)
 setup_thread.start()
+
+ftp_thread = Thread(target=ftp)
+ftp_thread.start()

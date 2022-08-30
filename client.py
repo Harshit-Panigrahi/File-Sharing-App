@@ -1,7 +1,11 @@
-import socket
+import socket, ftplib, os, ntpath, time
 from threading import Thread
 from tkinter import *
 from tkinter import ttk, filedialog
+from ftplib import FTP
+from pyftpdlib.authorizers import DummyAuthorizer
+from pyftpdlib.handlers import FTPHandler
+from pyftpdlib.servers import FTPServer
 
 PORT = 8080
 IP_ADDRESS = '127.0.0.1'
@@ -11,9 +15,22 @@ BUFFER_SIZE = 4096
 name = None
 sending_file = None
 listbox = None
+filePathLabel = None
 chatbox = None
-labelchat = None
-text_message = None
+chatEntry = None
+
+def getFileSize(file_name):
+  with open(file_name, "rb") as file:
+    chunk = file.read()
+    return len(chunk)
+
+def sendMessage():
+  global SERVER, chatbox, chatEntry
+  msg = chatEntry.get()
+  SERVER.send(msg.encode('ascii'))
+  chatbox.insert(END, "\nYou: " + msg)
+  chatbox.see("end")
+  chatEntry.delete(0, 'end')
 
 def receiveMessage():
   global SERVER
@@ -53,13 +70,35 @@ def connectToServer():
   SERVER.send(cname.encode())
 
 def showClientList():
-  print(f"Calling client list function")
-  global listbox, SERVER
   listbox.delete(0, "end")
   SERVER.send("show list".encode("ascii"))
 
+def browseFiles():
+  global chatbox, filePathLabel
+  try:
+    filename = filedialog.askopenfilename()
+    filePathLabel.configure(text=filename)
+
+    HOSTNAME = "127.0.0.1"
+    USERNAME = "lftpd"
+    PASSWORD = "lftpd"
+
+    ftp_server = FTP(HOSTNAME, USERNAME, PASSWORD)
+    ftp_server.encoding = 'utf-8'
+    ftp_server.cwd('shared_files')
+    fname = ntpath.basename(filename)
+    
+    with open(filename, 'rb') as file:
+      ftp_server.storbinary(f"STOR {fname}", file)
+    
+    ftp_server.dir()
+    ftp_server.quit()
+
+  except FileNotFoundError:
+    print("Cancel button has been pressed!...")
+
 def openChatWindow():
-  global name, listbox, chatbox
+  global name, listbox, chatbox, chatEntry, filePathLabel
   window = Tk()
   window.title("Messenger")
   window.geometry("500x350")
@@ -95,20 +134,23 @@ def openChatWindow():
   refreshBtn = Button(window, text="Refresh", bd=1, font=("Calibri", 10), command=showClientList)
   refreshBtn.place(x=430, y=160)
 
-  labelchat = Label(window, text="Chat Window", font=("Calibri", 10))
-  labelchat.place(x=20, y=175)
+  chatlabel = Label(window, text="Chat Window", font=("Calibri", 10))
+  chatlabel.place(x=20, y=175)
 
   chatbox = Text(window, height=5, width=65, font=("Calibri", 10))
   chatbox.place(x=20, y=200)
 
   attachBtn = Button(window, text="Attach & send", bd=1, font=("Calibri", 10))
-  attachBtn.place(x=25, y=285)
+  attachBtn.place(x=25, y=290)
 
   chatEntry = Entry(window, width=40, font=("Calibri", 10))
-  chatEntry.place(x=120, y=287)
+  chatEntry.place(x=120, y=292)
 
-  sendBtn = Button(window, text="Send", bd=1, font=("Calibri", 10))
-  sendBtn.place(x=420, y=285)
+  sendBtn = Button(window, text="Send", bd=1, font=("Calibri", 10), command=sendMessage)
+  sendBtn.place(x=420, y=290)
+
+  filePathLabel = Label(window, text="", font=("Calibri", 8))
+  filePathLabel.place(x=25, y=320)
 
   window.mainloop()
 
