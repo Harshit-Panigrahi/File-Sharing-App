@@ -1,17 +1,18 @@
-import socket
+import socket, time, os
 from threading import Thread
-import time, os
-
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
-
 
 IP_ADDRESS = '127.0.0.1'
 PORT = 8080
 BUFFER_SIZE = None
 SERVER = None
 clients = {}
+
+is_dir_exists = os.path.isdir('shared_files')
+if(not is_dir_exists):
+  os.makedirs('shared_files')
 
 def acceptConnections():
   global SERVER
@@ -67,13 +68,21 @@ def handleMessage(client, msg, name):
     connectClient(msg, client, name)
   elif msg[:10] == 'disconnect':
     disconnectClient(msg, client, name)
-  else: 
+  elif msg[:4] == "send":
+    file_name = msg.split(" ")[1]
+    file_size = int(msg.split(" ")[2])
+    handleSendFile(name, file_name, file_size)
+  elif msg.lower("y"):
+    grantAccess(name)
+  elif msg.lower("n"):
+    denyAccess(name)
+  else:
     connected = clients[name]["connected_with"]
     if(connected):
       sendTextMessage(name, msg)
     else: 
       handleErrorMessage(client)
-
+  
 def sendTextMessage(name, msg):
   global clients 
   other_client_name = clients[name]["connected_with"]
@@ -98,6 +107,39 @@ def handleShowList(client):
 
     time.sleep(1)
     client.send(msg.encode())
+
+def grantAccess(name):
+  global clients
+
+  other_client_name = clients[name]["connected_with"]
+  other_client_socket = clients[other_client_name]["client"]
+
+  msg = "access granted"
+  other_client_socket.send(msg.encode())
+
+def denyAccess(name):
+  global clients
+
+  other_client_name = clients[name]["connected_with"]
+  other_client_socket = clients[other_client_name]["client"]
+
+  msg = "access denied"
+  other_client_socket.send(msg.encode())
+
+def handleSendFile(name, file_name, file_size):
+  global clients
+
+  clients[name]["file_name"] = file_name
+  clients[name]["file_size"] = file_size
+
+  other_client_name = clients[name]["connected_with"]
+  other_client_socket = clients[other_client_name]["client"]
+
+  msg = f"\n {name} wants to send {file_name} file with {file_size} size. Do you want to download? (Y/N)"
+  other_client_socket.send(msg.encode())
+  time.sleep(1)
+  msgdown = f"Download:{file_name}"
+  other_client_socket.send(msgdown.encode())
 
 def connectClient(msg, client, name):
   global clients

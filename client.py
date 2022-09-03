@@ -6,6 +6,7 @@ from ftplib import FTP
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
+from pathlib import Path
 
 PORT = 8080
 IP_ADDRESS = '127.0.0.1'
@@ -14,8 +15,11 @@ BUFFER_SIZE = 4096
 
 name = None
 sending_file = None
+downloading_file = None
+file_to_download = None
 listbox = None
 filePathLabel = None
+chatlabel = None
 chatbox = None
 chatEntry = None
 
@@ -31,10 +35,33 @@ def sendMessage():
   chatbox.insert(END, "\nYou: " + msg)
   chatbox.see("end")
   chatEntry.delete(0, 'end')
+  if msg.lower() == "y":
+    print("Please wait while the file is downloading...")
+    chatbox.insert(END, "\nPlease wait while the file is downloading...")
+    chatbox.see("end")
+
+    HOSTNAME = "127.0.0.1"
+    USERNAME = "lftpd"
+    PASSWORD = "lftpd"
+
+    home = str(Path.home())
+    download_path = home + '/Downloads'
+    ftp_server = ftplib.FTP(HOSTNAME, USERNAME, PASSWORD)
+    ftp_server.encoding = 'utf-8'
+    ftp_server.cwd('shared_files')
+    fname = file_to_download
+    local_filename = os.path.join(download_path, fname)
+    file = open(local_filename, 'wb')
+    ftp_server.retrbinary('RETR '+ fname, file.write)
+    ftp_server.dir()
+    file.close()
+    ftp_server.quit()
+    print("File successfully transferred.....")
+    chatbox.insert(END, "\nFile successfully downloaded to path: "+ download_path)
+    chatbox.see("end")
 
 def receiveMessage():
-  global SERVER
-  global BUFFER_SIZE
+  global SERVER, BUFFER_SIZE, file_to_download, downloading_file
   
   while True:
     chunk = SERVER.recv(BUFFER_SIZE).decode()
@@ -42,10 +69,27 @@ def receiveMessage():
       if("~tiul" in chunk):
         letter_list = chunk.split(",")
         listbox.insert(letter_list[0], letter_list[0]+":"+letter_list[1]+": "+letter_list[3])
+      elif(chunk=="access granted" or chunk=="access denied"):
+        chatlabel.configure(text = "")
+        chatbox.insert(END, "\n" + chunk)
+        chatbox.see("end")
+      elif("download?" in chunk):
+        chatlabel.configure(text = "")
+        downloading_file = chunk.split(" ")[4].strip()
+        BUFFER_SIZE = int(chunk.split(" ")[7])
+        chatbox.insert(END, "\n" + chunk)
+        chatbox.see("end")
+        print(chunk)
+      elif("Download:" in chunk):
+        chatlabel.configure(text = "")
+        getfilename = chunk.split(":")
+        file_to_download= getfilename[1]
       else:
-        chatbox.insert(END,"\n"+chunk)
+        chatlabel.configure(text = "")
+        chatbox.insert(END, "\n"+chunk)
         chatbox.see("end")
     except:
+      print("An exception occurred")
       pass
 
 def connectWithClient():
@@ -63,8 +107,7 @@ def disconnectWithClient():
   SERVER.send(msg.encode('ascii'))
 
 def connectToServer():
-  global SERVER, name
-  global sending_file
+  global SERVER, name, sending_file
 
   cname = name.get()
   SERVER.send(cname.encode())
@@ -94,11 +137,22 @@ def browseFiles():
     ftp_server.dir()
     ftp_server.quit()
 
+    msg = ("send " + fname)
+    if(msg[:4] == "send"):
+      print("Please wait......\n")
+      chatbox.insert(END, "\nPlease wait......\n")
+      chatbox.see(END)
+      sending_file = msg[5:]
+      file_size = getFileSize("shared_files/"+sending_file)
+      final_msg = msg+" "+str(file_size)
+      SERVER.send(final_msg.encode())
+      chatbox.insert(END, "\nFile Successfuly Sent")
+
   except FileNotFoundError:
-    print("Cancel button has been pressed!...")
+    print("Cancel button has been pressed")
 
 def openChatWindow():
-  global name, listbox, chatbox, chatEntry, filePathLabel
+  global name, listbox, chatbox, chatEntry, filePathLabel, chatlabel
   window = Tk()
   window.title("Messenger")
   window.geometry("500x350")
@@ -140,7 +194,7 @@ def openChatWindow():
   chatbox = Text(window, height=5, width=65, font=("Calibri", 10))
   chatbox.place(x=20, y=200)
 
-  attachBtn = Button(window, text="Attach & send", bd=1, font=("Calibri", 10))
+  attachBtn = Button(window, text="Attach & send", bd=1, font=("Calibri", 10), command=browseFiles)
   attachBtn.place(x=25, y=290)
 
   chatEntry = Entry(window, width=40, font=("Calibri", 10))
